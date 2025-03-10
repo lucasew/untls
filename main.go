@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
+	"strconv"
 	"sync"
 )
 
@@ -44,15 +46,35 @@ func init() {
 	}
 }
 
+func GetPortStr() string {
+	if localPort < 0 {
+		return "systemd"
+	} else {
+		return fmt.Sprintf("%d", localPort)
+	}
+}
+
+func GetListener() (net.Listener, error) {
+	if os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) {
+		// systemd run
+		f := os.NewFile(3, "from systemd")
+		localPort = -1
+		return net.FileListener(f)
+	} else {
+		// manual run
+		return net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", localPort))
+	}
+}
+
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", localPort))
+	ln, err := GetListener()
 	if err != nil {
-		log.Fatalf("failed to listen port %d: %s", localPort, err)
+		log.Fatalf("failed to listen socket %s: %s", GetPortStr(), err)
 	}
 	defer ln.Close()
-	log.Printf("info: listening on port %d", localPort)
+	log.Printf("info: listening on port %s", GetPortStr())
 
 	for {
 		select {
