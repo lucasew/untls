@@ -16,7 +16,7 @@ ENV VERSION_GIT=$VERSION_GIT
 
 RUN go build -v -o untls .
 
-FROM alpine:3.21
+FROM alpine:3.22
 
 COPY --from=build-env /go/src/untls/untls /usr/local/bin
 
