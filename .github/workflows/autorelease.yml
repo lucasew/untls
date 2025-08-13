@@ -61,7 +61,7 @@ jobs:
         fi
     - uses: actions/setup-go@v5.5.0
       with:
-          go-version: '1.24'
+          go-version: '1.25'
 
     - run: mkdir build -p && ls && pwd
     - run: GOOS=windows GOARCH=amd64 go build -o build/untls-windows-amd64.exe .
