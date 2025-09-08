@@ -35,10 +35,13 @@ jobs:
         password: ${{ github.token }}
 
     - uses: actions/checkout@v5
+    - uses: jdx/mise-action@v2
+
     - name: Setup git config
       run: |
         git config user.name actions-bot
         git config user.email actions-bot@users.noreply.github.com
+
 
     - name: Create Pull Request if there is new stuff from updaters
       uses: peter-evans/create-pull-request@v7
@@ -59,9 +62,6 @@ jobs:
           echo "The update scripts changed something and a PR was created. Giving up deploy." >> $GITHUB_STEP_SUMMARY
           exit 1
         fi
-    - uses: actions/setup-go@v5.5.0
-      with:
-          go-version: '1.25'
 
     - run: mkdir build -p && ls && pwd
     - run: GOOS=windows GOARCH=amd64 go build -o build/untls-windows-amd64.exe .
