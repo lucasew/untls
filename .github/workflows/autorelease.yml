@@ -28,14 +28,14 @@ jobs:
       pull-requests: write
     steps:
     - name: Login to registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ env.USERNAME }}
         password: ${{ github.token }}
 
-    - uses: actions/checkout@v6
-    - uses: jdx/mise-action@v3
+    - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6
+    - uses: jdx/mise-action@d16887ba50704baed7de72bd1e82e04391e4457a # v3
 
     - name: Setup git config
       run: |
@@ -44,7 +44,7 @@ jobs:
 
 
     - name: Create Pull Request if there is new stuff from updaters
-      uses: peter-evans/create-pull-request@v7
+      uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
       id: pr_create
       with:
         commit-message: Updater script changes
@@ -80,7 +80,7 @@ jobs:
     - name: Create relase
       if: env.RELEASE_VERSION != ''
       id: release
-      uses: elgohr/Github-Release-Action@v5
+      uses: elgohr/Github-Release-Action@c5ea99036abb741a89f8bf1f2cd7fba845e3313a # v5
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -88,7 +88,7 @@ jobs:
           tag: ${{ env.RELEASE_VERSION }}
           title: Release ${{ env.RELEASE_VERSION }}
 
-    - uses: svenstaro/upload-release-action@v2
+    - uses: svenstaro/upload-release-action@6b7fa9f267e90b50a19fef07b3596790bb941741 # v2
       if: env.RELEASE_VERSION != ''
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
