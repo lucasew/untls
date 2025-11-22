@@ -77,7 +77,7 @@ jobs:
           echo "RELEASE_VERSION=$(cat version.txt)" >> $GITHUB_ENV
         fi
 
-    - name: Create release with gh CLI
+    - name: Create relase
       if: env.RELEASE_VERSION != ''
       env:
         GH_TOKEN: ${{ github.token }}
@@ -85,8 +85,7 @@ jobs:
         gh release create "$RELEASE_VERSION" \
           --title "Release $RELEASE_VERSION" \
           --generate-notes \
-          build/untls-windows-amd64.exe \
-          build/untls-linux-amd64
+          build/*
 
     - name: "Build and publish container"
       env:
