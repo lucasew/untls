@@ -79,23 +79,13 @@ jobs:
 
     - name: Create relase
       if: env.RELEASE_VERSION != ''
-      id: release
-      uses: elgohr/Github-Release-Action@c5ea99036abb741a89f8bf1f2cd7fba845e3313a # v5
       env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-          prerelease: false
-          tag: ${{ env.RELEASE_VERSION }}
-          title: Release ${{ env.RELEASE_VERSION }}
-
-    - uses: svenstaro/upload-release-action@6b7fa9f267e90b50a19fef07b3596790bb941741 # v2
-      if: env.RELEASE_VERSION != ''
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: build/*
-        tag: ${{ env.RELEASE_VERSION }}
-        overwrite: true
-        file_glob: true
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release create "$RELEASE_VERSION" \
+          --title "Release $RELEASE_VERSION" \
+          --generate-notes \
+          build/*
 
     - name: "Build and publish container"
       env:
