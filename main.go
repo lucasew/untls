@@ -106,7 +106,12 @@ var bufferPool = sync.Pool{
 }
 
 func handleConn(downstream, upstream net.Conn) {
-	first := make(chan<- struct{}, 1)
+	var once sync.Once
+	closeConnections := func() {
+		downstream.Close()
+		upstream.Close()
+		log.Printf("conn/%s: disconnected %v", downstream.RemoteAddr(), upstream.RemoteAddr())
+	}
 
 	cp := func(dst net.Conn, src net.Conn) {
 		buf := bufferPool.Get().([]byte)
@@ -114,16 +119,12 @@ func handleConn(downstream, upstream net.Conn) {
 		// TODO use splice on linux
 		// TODO needs some timeout to prevent torshammer ddos
 		_, err := io.CopyBuffer(dst, src, buf)
-		select {
-		case first <- struct{}{}:
+		once.Do(func() {
 			if err != nil {
 				log.Print(err)
 			}
-			dst.Close()
-			src.Close()
-			log.Printf("conn/%s: disconnected %v", downstream.RemoteAddr(), upstream.RemoteAddr())
-		default:
-		}
+			closeConnections()
+		})
 	}
 	go cp(downstream, upstream)
 	cp(upstream, downstream)
