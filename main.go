@@ -11,7 +11,10 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 )
+
+const idleTimeout = 1 * time.Minute
 
 var localPort int
 var remote string
@@ -30,7 +33,7 @@ func GetFreePort() (port int, err error) {
 	return
 }
 
-func init() {
+func parseFlags() {
 	flag.IntVar(&localPort, "l", 0, "Raw TCP port to listen")
 	flag.StringVar(&remote, "t", "", "Which TCP socket, that can be a TLS socket, to proxy")
 	flag.Parse()
@@ -67,6 +70,7 @@ func GetListener() (net.Listener, error) {
 }
 
 func main() {
+	parseFlags()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ln, err := GetListener()
@@ -92,7 +96,7 @@ func main() {
 				log.Printf("conn/%s: %s", downstream.RemoteAddr(), err)
 				return
 			}
-			go handleConn(downstream, upstream)
+			go handleConn(&idleTimeoutConn{Conn: downstream, timeout: idleTimeout}, &idleTimeoutConn{Conn: upstream, timeout: idleTimeout})
 		}
 	}
 }
@@ -128,4 +132,19 @@ func handleConn(downstream, upstream net.Conn) {
 	}
 	go cp(downstream, upstream)
 	cp(upstream, downstream)
+}
+
+type idleTimeoutConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c *idleTimeoutConn) Read(b []byte) (int, error) {
+	c.Conn.SetReadDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Read(b)
+}
+
+func (c *idleTimeoutConn) Write(b []byte) (int, error) {
+	c.Conn.SetWriteDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Write(b)
 }
