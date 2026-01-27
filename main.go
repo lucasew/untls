@@ -30,7 +30,7 @@ func GetFreePort() (port int, err error) {
 	return
 }
 
-func init() {
+func parseFlags() {
 	flag.IntVar(&localPort, "l", 0, "Raw TCP port to listen")
 	flag.StringVar(&remote, "t", "", "Which TCP socket, that can be a TLS socket, to proxy")
 	flag.Parse()
@@ -67,6 +67,7 @@ func GetListener() (net.Listener, error) {
 }
 
 func main() {
+	parseFlags()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ln, err := GetListener()
