@@ -61,12 +61,6 @@ func main() {
 	}
 }
 
-/*
-bufferPool is a sync.Pool used to reuse byte buffers for I/O operations.
-
-Allocating a new buffer for every connection copy operation would create significant
-garbage collection pressure. Using a pool allows us to recycle these 32KB buffers (1<<15).
-*/
 var bufferPool = sync.Pool{
 	New: func() interface{} {
 		// TODO maybe different buffer size?
@@ -75,17 +69,6 @@ var bufferPool = sync.Pool{
 	},
 }
 
-/*
-handleConn bridges the connection between the downstream client and the upstream TLS server.
-
-It initiates a bidirectional copy of data:
-1. Downstream -> Upstream (run in a new goroutine).
-2. Upstream -> Downstream (run in the current goroutine).
-
-It uses sync.Once to ensure that connection cleanup (closing both sockets) happens exactly once,
-preventing double-close errors or resource leaks. When either direction finishes (EOF or error),
-both connections are closed.
-*/
 func handleConn(downstream, upstream net.Conn) {
 	var once sync.Once
 	closeConnections := func() {
