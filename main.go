@@ -16,8 +16,18 @@ import (
 var localPort int
 var remote string
 
-// from: https://gist.github.com/sevkin/96bdae9274465b2d09191384f86ef39d
-// GetFreePort asks the kernel for a free open port that is ready to use.
+/*
+GetFreePort asks the kernel for a free open port that is ready to use.
+
+It works by resolving the TCP address for "localhost:0" and attempting to listen on it.
+When port 0 is requested, the kernel automatically assigns a free ephemeral port.
+The listener is then closed, and the assigned port number is returned.
+
+Note: There is a theoretical race condition where the port could be claimed by another process
+immediately after it is released by this function, but it is generally safe for short intervals.
+
+Source: https://gist.github.com/sevkin/96bdae9274465b2d09191384f86ef39d
+*/
 func GetFreePort() (port int, err error) {
 	var a *net.TCPAddr
 	if a, err = net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
@@ -46,6 +56,13 @@ func init() {
 	}
 }
 
+/*
+GetPortStr returns a string representation of the port being listened on.
+
+If the application is running under systemd socket activation (localPort < 0),
+it returns "systemd". Otherwise, it returns the numeric port string.
+This is primarily used for logging purposes.
+*/
 func GetPortStr() string {
 	if localPort < 0 {
 		return "systemd"
@@ -54,6 +71,16 @@ func GetPortStr() string {
 	}
 }
 
+/*
+GetListener creates a net.Listener for the application to accept connections.
+
+It detects if the application is being run with systemd socket activation by checking
+the LISTEN_PID environment variable.
+ 1. Systemd Mode: If LISTEN_PID matches the current PID, it wraps the file descriptor 3
+    (which systemd passes for the socket) using net.FileListener.
+ 2. Manual Mode: If not running under systemd, it creates a standard TCP listener
+    on 127.0.0.1 using the configured localPort.
+*/
 func GetListener() (net.Listener, error) {
 	if os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) {
 		// systemd run
@@ -66,6 +93,17 @@ func GetListener() (net.Listener, error) {
 	}
 }
 
+/*
+main is the entry point of the application.
+
+It initializes the listener (either systemd or manual), and enters an infinite loop
+to accept incoming TCP connections. For each connection:
+1. It accepts the connection from the listener.
+2. It dials the remote TLS upstream specified by the `-t` flag.
+3. It spawns a goroutine (handleConn) to proxy data between the local connection and the upstream.
+
+The application handles graceful shutdown of connections via context (though currently simple).
+*/
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -97,6 +135,12 @@ func main() {
 	}
 }
 
+/*
+bufferPool is a sync.Pool used to reuse byte buffers for I/O operations.
+
+Allocating a new buffer for every connection copy operation would create significant
+garbage collection pressure. Using a pool allows us to recycle these 32KB buffers (1<<15).
+*/
 var bufferPool = sync.Pool{
 	New: func() interface{} {
 		// TODO maybe different buffer size?
@@ -105,6 +149,17 @@ var bufferPool = sync.Pool{
 	},
 }
 
+/*
+handleConn bridges the connection between the downstream client and the upstream TLS server.
+
+It initiates a bidirectional copy of data:
+1. Downstream -> Upstream (run in a new goroutine).
+2. Upstream -> Downstream (run in the current goroutine).
+
+It uses sync.Once to ensure that connection cleanup (closing both sockets) happens exactly once,
+preventing double-close errors or resource leaks. When either direction finishes (EOF or error),
+both connections are closed.
+*/
 func handleConn(downstream, upstream net.Conn) {
 	var once sync.Once
 	closeConnections := func() {
