@@ -4,35 +4,21 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"net"
-	"os"
-	"strconv"
 	"sync"
 )
 
 var localPort int
 var remote string
 
-// from: https://gist.github.com/sevkin/96bdae9274465b2d09191384f86ef39d
-// GetFreePort asks the kernel for a free open port that is ready to use.
-func GetFreePort() (port int, err error) {
-	var a *net.TCPAddr
-	if a, err = net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
-		var l *net.TCPListener
-		if l, err = net.ListenTCP("tcp", a); err == nil {
-			defer l.Close()
-			return l.Addr().(*net.TCPAddr).Port, nil
-		}
-	}
-	return
-}
-
 func init() {
 	flag.IntVar(&localPort, "l", 0, "Raw TCP port to listen")
 	flag.StringVar(&remote, "t", "", "Which TCP socket, that can be a TLS socket, to proxy")
+}
+
+func main() {
 	flag.Parse()
 	var err error
 	if localPort == 0 {
@@ -44,37 +30,15 @@ func init() {
 	if remote == "" {
 		log.Fatalf("missing tcp socket to connect")
 	}
-}
 
-func GetPortStr() string {
-	if localPort < 0 {
-		return "systemd"
-	} else {
-		return fmt.Sprintf("%d", localPort)
-	}
-}
-
-func GetListener() (net.Listener, error) {
-	if os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) {
-		// systemd run
-		f := os.NewFile(3, "from systemd")
-		localPort = -1
-		return net.FileListener(f)
-	} else {
-		// manual run
-		return net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", localPort))
-	}
-}
-
-func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ln, err := GetListener()
+	ln, portStr, err := CreateListener(localPort)
 	if err != nil {
-		log.Fatalf("failed to listen socket %s: %s", GetPortStr(), err)
+		log.Fatalf("failed to listen socket %s: %s", portStr, err)
 	}
 	defer ln.Close()
-	log.Printf("info: listening on port %s", GetPortStr())
+	log.Printf("info: listening on port %s", portStr)
 
 	for {
 		select {
