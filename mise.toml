@@ -1,6 +1,6 @@
 [tools]
-go = "1.22.6"
-golangci-lint = "latest"
+go = "1.25.6"
+golangci-lint = "2.8.0"
 
 [tasks]
 "install:go" = "go mod download"
