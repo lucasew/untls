@@ -25,7 +25,7 @@ func TestCreateListener_Manual(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateListener failed: %v", err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	if source != strconv.Itoa(port) {
 		t.Errorf("expected source %s, got %s", strconv.Itoa(port), source)
@@ -48,7 +48,7 @@ func TestCreateListener_Systemd(t *testing.T) {
 
 	// If it succeeds (unlikely but possible if FD 3 is valid), close it.
 	if err == nil {
-		ln.Close()
+		_ = ln.Close()
 	}
 
 	// We expect source to be "systemd" regardless of error, because that's how we coded it.

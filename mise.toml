@@ -1,2 +1,25 @@
 [tools]
-go = "1.25.6"
+go = "1.22.6"
+golangci-lint = "latest"
+
+[tasks]
+"install:go" = "go mod download"
+"install" = { depends = ["install:*"] }
+
+"codegen:go" = "go generate ./..."
+"codegen" = { depends = ["codegen:*"] }
+
+"fmt:go" = "go fmt ./..."
+"fmt" = { depends = ["fmt:*"] }
+
+"lint:golangci-lint" = "golangci-lint run"
+"lint" = { depends = ["lint:*"] }
+
+"test:go" = "go test -v ./..."
+"test" = { depends = ["test:*"] }
+
+"ci" = { depends = ["lint", "test"] }
+
+"build:linux" = "go build -o build/untls-linux-amd64 ."
+"build:windows" = { run = "go build -o build/untls-windows-amd64.exe .", env = { GOOS = "windows", GOARCH = "amd64" } }
+"build" = { depends = ["build:*"] }

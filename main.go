@@ -37,13 +37,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen socket %s: %s", portStr, err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	log.Printf("info: listening on port %s", portStr)
 
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			return
 		default:
 			downstream, err := ln.Accept()
 			if err != nil {
@@ -71,7 +71,8 @@ var bufferPool = sync.Pool{
 	New: func() interface{} {
 		// TODO maybe different buffer size?
 		// benchmark pls
-		return make([]byte, 1<<15)
+		b := make([]byte, 1<<15)
+		return &b
 	},
 }
 
@@ -89,14 +90,15 @@ both connections are closed.
 func handleConn(downstream, upstream net.Conn) {
 	var once sync.Once
 	closeConnections := func() {
-		downstream.Close()
-		upstream.Close()
+		_ = downstream.Close()
+		_ = upstream.Close()
 		log.Printf("conn/%s: disconnected %v", downstream.RemoteAddr(), upstream.RemoteAddr())
 	}
 
 	cp := func(dst net.Conn, src net.Conn) {
-		buf := bufferPool.Get().([]byte)
-		defer bufferPool.Put(buf)
+		bufPtr := bufferPool.Get().(*[]byte)
+		buf := *bufPtr
+		defer bufferPool.Put(bufPtr)
 		// TODO use splice on linux
 		// TODO needs some timeout to prevent torshammer ddos
 		_, err := io.CopyBuffer(dst, src, buf)
