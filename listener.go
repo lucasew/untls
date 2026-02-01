@@ -9,16 +9,19 @@ import (
 
 // from: https://gist.github.com/sevkin/96bdae9274465b2d09191384f86ef39d
 // GetFreePort asks the kernel for a free open port that is ready to use.
-func GetFreePort() (port int, err error) {
-	var a *net.TCPAddr
-	if a, err = net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
-		var l *net.TCPListener
-		if l, err = net.ListenTCP("tcp", a); err == nil {
-			defer func() { _ = l.Close() }()
-			return l.Addr().(*net.TCPAddr).Port, nil
-		}
+func GetFreePort() (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		return 0, err
 	}
-	return
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = l.Close() }()
+
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // CreateListener creates a listener based on the environment or arguments.
