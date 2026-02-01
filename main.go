@@ -51,7 +51,9 @@ func main() {
 				continue
 			}
 			log.Printf("conn: %s", downstream.RemoteAddr().String())
-			upstream, err := tls.Dial("tcp", remote, &tls.Config{})
+			upstream, err := tls.Dial("tcp", remote, &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			})
 			if err != nil {
 				log.Printf("conn/%s: %s", downstream.RemoteAddr(), err)
 				return
