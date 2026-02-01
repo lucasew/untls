@@ -46,7 +46,7 @@ jobs:
         run: mise run codegen
 
       - name: Create Pull Request if changes detected
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8
         id: pr_create
         with:
           commit-message: "chore: update generated code"
