@@ -7,8 +7,24 @@ import (
 	"strconv"
 )
 
-// from: https://gist.github.com/sevkin/96bdae9274465b2d09191384f86ef39d
-// GetFreePort asks the kernel for a free open port that is ready to use.
+/**
+ * GetFreePort asks the kernel for a free open port that is ready to use.
+ *
+ * Flow:
+ * 1. Resolves a TCP address on localhost with port 0 (random).
+ * 2. Listens on that address to let the kernel assign a port.
+ * 3. Retrieves the assigned port.
+ * 4. Closes the listener immediately.
+ *
+ * Edge Case:
+ * There is a race condition where another process might bind to the returned port
+ * between the time it is released here and when the caller tries to use it.
+ *
+ * Credit: https://gist.github.com/sevkin/96bdae9274465b2d09191384f86ef39d
+ *
+ * @returns {int} port - The free port number.
+ * @returns {error} err - Error if unable to resolve or listen.
+ */
 func GetFreePort() (port int, err error) {
 	var a *net.TCPAddr
 	if a, err = net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
@@ -21,9 +37,19 @@ func GetFreePort() (port int, err error) {
 	return
 }
 
-// CreateListener creates a listener based on the environment or arguments.
-// It checks for systemd activation first.
-// Returns the listener, a description of the source (e.g., "systemd" or "127.0.0.1:port"), and error.
+/**
+ * CreateListener initializes a TCP listener, prioritizing systemd socket activation.
+ *
+ * Logic:
+ * - Checks if `LISTEN_PID` matches the current PID. If so, it assumes systemd passed
+ *   the socket via file descriptor 3 (SD_LISTEN_FDS_START).
+ * - If not running under systemd, it falls back to listening on `127.0.0.1:<port>`.
+ *
+ * @param {int} port - The fallback port to listen on if systemd is not detected.
+ * @returns {net.Listener} - The initialized listener.
+ * @returns {string} - A description of the listener source ("systemd" or "127.0.0.1:<port>").
+ * @returns {error} - Error if listener creation fails.
+ */
 func CreateListener(port int) (net.Listener, string, error) {
 	if os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) {
 		// systemd run
