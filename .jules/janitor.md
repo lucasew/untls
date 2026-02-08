@@ -1,0 +1,1 @@
+- 2026-02-08: Server should continue running on per-connection errors instead of exiting.

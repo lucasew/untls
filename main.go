@@ -54,7 +54,8 @@ func main() {
 			upstream, err := tls.Dial("tcp", remote, &tls.Config{})
 			if err != nil {
 				log.Printf("conn/%s: %s", downstream.RemoteAddr(), err)
-				return
+				_ = downstream.Close()
+				continue
 			}
 			go handleConn(downstream, upstream)
 		}
