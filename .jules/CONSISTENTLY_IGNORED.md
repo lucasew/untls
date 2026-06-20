@@ -16,18 +16,6 @@
 **- Justification:** Custom connection wrappers add significant boilerplate complexity and risk introducing bugs. The project prefers simplicity over complex timeout handling unless critical.
 **- Files Affected:** `main.go`
 
-## IGNORE: Change Server Loop Exit Behavior
-
-**- Pattern:** Changing `return` to `continue` (or other recovery logic) when `tls.Dial` fails in the main loop.
-**- Justification:** The current behavior (exit on upstream failure) is intentional; changing it to keep the server running is consistently rejected.
-**- Files Affected:** `main.go`
-
-## IGNORE: Move Flag Definitions
-
-**- Pattern:** Moving `flag` definitions (e.g. `flag.IntVar`) out of `init()`.
-**- Justification:** Flag definitions belong in `init()`; only `flag.Parse()` should be in `main()`.
-**- Files Affected:** `main.go`
-
 ## IGNORE: Update Dependency Digests
 
 **- Pattern:** Updating Docker image or GitHub Action dependencies by SHA digest.
