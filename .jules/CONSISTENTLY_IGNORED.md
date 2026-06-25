@@ -16,8 +16,8 @@
 **- Justification:** Custom connection wrappers add significant boilerplate complexity and risk introducing bugs. The project prefers simplicity over complex timeout handling unless critical.
 **- Files Affected:** `main.go`
 
-## IGNORE: Agent-Specific Journals
+## IGNORE: Proactive Agent Roles
 
-**- Pattern:** Creating or updating agent-specific journal files (e.g., `.jules/janitor.md`, `.jules/sentinel.md`).
-**- Justification:** Project conventions dictate a centralized approach rather than disparate agent-specific tracking files which clutter the repository. Such journal files are consistently rejected.
-**- Files Affected:** `.jules/*.md` (excluding centralized files like `CONSISTENTLY_IGNORED.md`)
+**- Pattern:** Submitting pull requests under proactive agent roles (e.g., `Janitor`, `Sentinel`) regardless of the code changes or files modified.
+**- Justification:** Proactive agent roles are retired and obsolete under the current agent model.
+**- Files Affected:** All files
