@@ -24,18 +24,18 @@ func main() {
 	if localPort == 0 {
 		localPort, err = GetFreePort()
 		if err != nil {
-			log.Fatalf("failed to find free port: %s", err)
+			reportFatalError(err, map[string]any{"action": "find_free_port"})
 		}
 	}
 	if remote == "" {
-		log.Fatalf("missing tcp socket to connect")
+		reportFatalError(nil, map[string]any{"error": "missing tcp socket to connect"})
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ln, portStr, err := CreateListener(localPort)
 	if err != nil {
-		log.Fatalf("failed to listen socket %s: %s", portStr, err)
+		reportFatalError(err, map[string]any{"action": "listen_socket", "port": portStr})
 	}
 	defer func() { _ = ln.Close() }()
 	log.Printf("info: listening on port %s", portStr)
@@ -47,13 +47,13 @@ func main() {
 		default:
 			downstream, err := ln.Accept()
 			if err != nil {
-				log.Printf("error/accept: %s", err.Error())
+				reportError(err, map[string]any{"action": "accept"})
 				continue
 			}
 			log.Printf("conn: %s", downstream.RemoteAddr().String())
 			upstream, err := tls.Dial("tcp", remote, &tls.Config{})
 			if err != nil {
-				log.Printf("conn/%s: %s", downstream.RemoteAddr(), err)
+				reportError(err, map[string]any{"action": "tls_dial", "remote": downstream.RemoteAddr().String()})
 				return
 			}
 			go handleConn(downstream, upstream)
@@ -104,7 +104,7 @@ func handleConn(downstream, upstream net.Conn) {
 		_, err := io.CopyBuffer(dst, src, buf)
 		once.Do(func() {
 			if err != nil {
-				log.Print(err)
+				reportError(err, map[string]any{"action": "copy_buffer"})
 			}
 			closeConnections()
 		})

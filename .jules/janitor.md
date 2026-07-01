@@ -1,0 +1,1 @@
+- 2026-07-01: Centralized error handling using reportError avoids silent failures and creates an integration point for crash telemetry.
