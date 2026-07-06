@@ -50,10 +50,12 @@ func GetFreePort() (port int, err error) {
  * @returns {string} - A description of the listener source ("systemd" or "127.0.0.1:<port>").
  * @returns {error} - Error if listener creation fails.
  */
+const sdListenFdsStart = 3
+
 func CreateListener(port int) (net.Listener, string, error) {
 	if os.Getenv("LISTEN_PID") == strconv.Itoa(os.Getpid()) {
 		// systemd run
-		f := os.NewFile(3, "from systemd")
+		f := os.NewFile(sdListenFdsStart, "from systemd")
 		l, err := net.FileListener(f)
 		if err != nil {
 			return nil, "systemd", err
