@@ -61,6 +61,8 @@ func main() {
 	}
 }
 
+const bufferSize = 1 << 15
+
 /**
  * bufferPool is a sync.Pool used to reuse byte buffers for I/O operations.
  *
@@ -70,7 +72,7 @@ func main() {
 var bufferPool = sync.Pool{
 	New: func() interface{} {
 		// Note: 32KB buffer reduces GC pressure by utilizing sync.Pool
-		b := make([]byte, 1<<15)
+		b := make([]byte, bufferSize)
 		return &b
 	},
 }
