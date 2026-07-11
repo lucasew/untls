@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"flag"
 	"io"
@@ -31,8 +30,6 @@ func main() {
 		log.Fatalf("missing tcp socket to connect")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	ln, portStr, err := CreateListener(localPort)
 	if err != nil {
 		log.Fatalf("failed to listen socket %s: %s", portStr, err)
@@ -41,23 +38,18 @@ func main() {
 	log.Printf("info: listening on port %s", portStr)
 
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			downstream, err := ln.Accept()
-			if err != nil {
-				log.Printf("error/accept: %s", err.Error())
-				continue
-			}
-			log.Printf("conn: %s", downstream.RemoteAddr().String())
-			upstream, err := tls.Dial("tcp", remote, &tls.Config{})
-			if err != nil {
-				log.Printf("conn/%s: %s", downstream.RemoteAddr(), err)
-				return
-			}
-			go handleConn(downstream, upstream)
+		downstream, err := ln.Accept()
+		if err != nil {
+			log.Printf("error/accept: %s", err.Error())
+			continue
 		}
+		log.Printf("conn: %s", downstream.RemoteAddr().String())
+		upstream, err := tls.Dial("tcp", remote, &tls.Config{})
+		if err != nil {
+			log.Printf("conn/%s: %s", downstream.RemoteAddr(), err)
+			return
+		}
+		go handleConn(downstream, upstream)
 	}
 }
 
