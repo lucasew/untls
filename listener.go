@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"strconv"
@@ -63,7 +62,7 @@ func CreateListener(port int) (net.Listener, string, error) {
 		return l, "systemd", nil
 	}
 	// manual run
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, strconv.Itoa(port), err
