@@ -43,7 +43,7 @@ func main() {
 			log.Printf("error/accept: %s", err.Error())
 			continue
 		}
-		log.Printf("conn: %s", downstream.RemoteAddr().String())
+		log.Printf("conn/%s: accepted", downstream.RemoteAddr())
 		upstream, err := tls.Dial("tcp", remote, &tls.Config{})
 		if err != nil {
 			log.Printf("conn/%s: %s", downstream.RemoteAddr(), err)
@@ -94,7 +94,7 @@ func handleConn(downstream, upstream net.Conn) {
 		_, err := io.CopyBuffer(dst, src, buf)
 		once.Do(func() {
 			if err != nil {
-				log.Print(err)
+				log.Printf("conn/%s: %v", downstream.RemoteAddr(), err)
 			}
 			closeConnections()
 		})
