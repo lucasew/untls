@@ -62,7 +62,7 @@ const bufferSize = 1 << 15
  * garbage collection pressure. Using a pool allows us to recycle these 32KB buffers (1<<15).
  */
 var bufferPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		// Note: 32KB buffer reduces GC pressure by utilizing sync.Pool
 		b := make([]byte, bufferSize)
 		return &b
