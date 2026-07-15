@@ -57,8 +57,11 @@ func CreateListener(port int) (net.Listener, string, error) {
 		f := os.NewFile(sdListenFdsStart, "from systemd")
 		l, err := net.FileListener(f)
 		if err != nil {
+			// Keep f open: LISTEN_PID may match without a socket on FD 3.
 			return nil, "systemd", err
 		}
+		// FileListener dups the fd; drop the original (see net.FileListener).
+		_ = f.Close()
 		return l, "systemd", nil
 	}
 	// manual run
