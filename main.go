@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -26,8 +27,8 @@ func main() {
 			log.Fatalf("failed to find free port: %s", err)
 		}
 	}
-	if remote == "" {
-		log.Fatalf("missing tcp socket to connect")
+	if err = validateRemote(remote); err != nil {
+		log.Fatal(err)
 	}
 
 	ln, portStr, err := CreateListener(localPort)
@@ -51,6 +52,22 @@ func main() {
 		}
 		go handleConn(downstream, upstream)
 	}
+}
+
+
+// validateRemote checks that -t is a non-empty host:port suitable for tls.Dial.
+func validateRemote(addr string) error {
+	if addr == "" {
+		return fmt.Errorf("missing tcp socket to connect (-t host:port)")
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("invalid -t address %q: want host:port: %w", addr, err)
+	}
+	if host == "" || port == "" {
+		return fmt.Errorf("invalid -t address %q: want host:port", addr)
+	}
+	return nil
 }
 
 const bufferSize = 1 << 15
