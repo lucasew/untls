@@ -19,7 +19,9 @@ RUN go build -v -o untls .
 
 FROM alpine:3.24@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4
 
+# tls.Dial uses the system cert pool; bare Alpine has none.
+RUN apk add --no-cache ca-certificates
+
 COPY --from=build-env /go/src/untls/untls /usr/local/bin
 
 ENTRYPOINT [ "/usr/local/bin/untls" ]
-
