@@ -3,6 +3,7 @@ package main
 import (
 	"net"
 	"testing"
+	"time"
 )
 
 func TestConnectUpstream_DialFailClosesDownstream(t *testing.T) {
@@ -23,6 +24,36 @@ func TestConnectUpstream_DialFailClosesDownstream(t *testing.T) {
 	}
 
 	// server was closed inside connectUpstream; further use should fail.
+	if _, werr := server.Write([]byte("x")); werr == nil {
+		t.Fatal("expected write on closed downstream to fail")
+	}
+}
+
+func TestServeConn_DialFailClosesDownstream(t *testing.T) {
+	client, server := net.Pipe()
+	defer func() { _ = client.Close() }()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+
+	// serveConn must return after dial failure without panicking and must
+	// close the client side (same ownership rules as connectUpstream).
+	done := make(chan struct{})
+	go func() {
+		serveConn(server, addr)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("serveConn did not return after dial failure")
+	}
+
 	if _, werr := server.Write([]byte("x")); werr == nil {
 		t.Fatal("expected write on closed downstream to fail")
 	}
