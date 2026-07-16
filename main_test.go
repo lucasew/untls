@@ -1,6 +1,32 @@
 package main
 
-import "testing"
+import (
+	"net"
+	"testing"
+)
+
+func TestConnectUpstream_DialFailClosesDownstream(t *testing.T) {
+	client, server := net.Pipe()
+	defer func() { _ = client.Close() }()
+
+	// Bind then close so dial fails immediately with connection refused.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+
+	_, err = connectUpstream(server, addr)
+	if err == nil {
+		t.Fatal("expected dial error for closed upstream port")
+	}
+
+	// server was closed inside connectUpstream; further use should fail.
+	if _, werr := server.Write([]byte("x")); werr == nil {
+		t.Fatal("expected write on closed downstream to fail")
+	}
+}
 
 func TestValidateRemote(t *testing.T) {
 	tests := []struct {

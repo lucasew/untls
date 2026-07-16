@@ -45,13 +45,27 @@ func main() {
 			continue
 		}
 		log.Printf("conn/%s: accepted", downstream.RemoteAddr())
-		upstream, err := tls.Dial("tcp", remote, &tls.Config{})
+		upstream, err := connectUpstream(downstream, remote)
 		if err != nil {
+			// Per-connection dial failures must not tear down the accept loop.
+			// connectUpstream already closed downstream.
 			log.Printf("conn/%s: %s", downstream.RemoteAddr(), err)
-			return
+			continue
 		}
 		go handleConn(downstream, upstream)
 	}
+}
+
+// connectUpstream dials remote over TLS for a newly accepted client.
+// On dial failure it closes downstream so the accept loop can continue
+// without leaking the client socket or exiting the process.
+func connectUpstream(downstream net.Conn, remote string) (net.Conn, error) {
+	upstream, err := tls.Dial("tcp", remote, &tls.Config{})
+	if err != nil {
+		_ = downstream.Close()
+		return nil, err
+	}
+	return upstream, nil
 }
 
 
