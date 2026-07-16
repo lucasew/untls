@@ -45,15 +45,23 @@ func main() {
 			continue
 		}
 		log.Printf("conn/%s: accepted", downstream.RemoteAddr())
-		upstream, err := connectUpstream(downstream, remote)
-		if err != nil {
-			// Per-connection dial failures must not tear down the accept loop.
-			// connectUpstream already closed downstream.
-			log.Printf("conn/%s: %s", downstream.RemoteAddr(), err)
-			continue
-		}
-		go handleConn(downstream, upstream)
+		// Dial and proxy off the accept loop so a slow or hung upstream
+		// cannot stall Accept for other clients.
+		go serveConn(downstream, remote)
 	}
+}
+
+// serveConn dials the upstream TLS endpoint and bridges the client.
+// Safe to call from a goroutine per accepted connection.
+func serveConn(downstream net.Conn, remote string) {
+	addr := downstream.RemoteAddr()
+	upstream, err := connectUpstream(downstream, remote)
+	if err != nil {
+		// connectUpstream already closed downstream.
+		log.Printf("conn/%s: %s", addr, err)
+		return
+	}
+	handleConn(downstream, upstream)
 }
 
 // connectUpstream dials remote over TLS for a newly accepted client.
