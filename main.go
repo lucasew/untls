@@ -20,23 +20,19 @@ func init() {
 
 func main() {
 	flag.Parse()
-	var err error
-	if localPort == 0 {
-		localPort, err = GetFreePort()
-		if err != nil {
-			log.Fatalf("failed to find free port: %s", err)
-		}
-	}
-	if err = validateRemote(remote); err != nil {
+	if err := validateRemote(remote); err != nil {
 		log.Fatal(err)
 	}
 
-	ln, portStr, err := CreateListener(localPort)
+	// localPort 0 → bind 127.0.0.1:0 and let the kernel pick a free port.
+	// Avoid GetFreePort()+rebind: that races and can also disagree on address
+	// family (localhost vs 127.0.0.1).
+	ln, source, err := CreateListener(localPort)
 	if err != nil {
-		log.Fatalf("failed to listen socket %s: %s", portStr, err)
+		log.Fatalf("failed to listen socket %s: %s", source, err)
 	}
 	defer func() { _ = ln.Close() }()
-	log.Printf("info: listening on port %s", portStr)
+	log.Printf("info: listening on %s", listenLabel(ln, source))
 
 	for {
 		downstream, err := ln.Accept()
@@ -49,6 +45,21 @@ func main() {
 		// cannot stall Accept for other clients.
 		go serveConn(downstream, remote)
 	}
+}
+
+// listenLabel is the human-readable bind description for startup logs.
+// Under systemd socket activation the source is "systemd"; otherwise use the
+// listener's actual local address so port 0 shows the OS-assigned port.
+func listenLabel(ln net.Listener, source string) string {
+	if source == "systemd" {
+		return source
+	}
+	if ln != nil {
+		if a := ln.Addr(); a != nil {
+			return a.String()
+		}
+	}
+	return source
 }
 
 // serveConn dials the upstream TLS endpoint and bridges the client.
@@ -75,7 +86,6 @@ func connectUpstream(downstream net.Conn, remote string) (net.Conn, error) {
 	}
 	return upstream, nil
 }
-
 
 // validateRemote checks that -t is a non-empty host:port suitable for tls.Dial.
 func validateRemote(addr string) error {

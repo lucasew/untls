@@ -82,3 +82,32 @@ func TestValidateRemote(t *testing.T) {
 		})
 	}
 }
+
+func TestListenLabel(t *testing.T) {
+	if got := listenLabel(nil, "systemd"); got != "systemd" {
+		t.Fatalf("systemd: got %q", got)
+	}
+
+	// Port 0 must surface the OS-assigned port, not the "0" source string.
+	t.Setenv("LISTEN_PID", "")
+	ln, source, err := CreateListener(0)
+	if err != nil {
+		t.Fatalf("CreateListener(0): %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	if source != "0" {
+		t.Fatalf("source = %q, want \"0\"", source)
+	}
+	tcp, ok := ln.Addr().(*net.TCPAddr)
+	if !ok || tcp.Port == 0 {
+		t.Fatalf("expected non-zero bound port, addr=%v", ln.Addr())
+	}
+	got := listenLabel(ln, source)
+	if got != ln.Addr().String() {
+		t.Fatalf("listenLabel = %q, want %q", got, ln.Addr().String())
+	}
+	if got == "0" || got == source {
+		t.Fatalf("listenLabel must not report unbound source %q", got)
+	}
+}
