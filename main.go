@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 )
 
 var localPort int
@@ -75,11 +77,20 @@ func serveConn(downstream net.Conn, remote string) {
 	handleConn(downstream, upstream)
 }
 
+// dialTimeout bounds the whole upstream TCP+TLS handshake. Without a
+// deadline, a blackholed or stuck peer leaves a goroutine and the client
+// half-open forever (the accept loop is already off the hot path).
+// Overridable in tests.
+var dialTimeout = 10 * time.Second
+
 // connectUpstream dials remote over TLS for a newly accepted client.
 // On dial failure it closes downstream so the accept loop can continue
 // without leaking the client socket or exiting the process.
 func connectUpstream(downstream net.Conn, remote string) (net.Conn, error) {
-	upstream, err := tls.Dial("tcp", remote, &tls.Config{})
+	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+	defer cancel()
+
+	upstream, err := (&tls.Dialer{Config: &tls.Config{}}).DialContext(ctx, "tcp", remote)
 	if err != nil {
 		_ = downstream.Close()
 		return nil, err
