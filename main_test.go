@@ -29,6 +29,43 @@ func TestConnectUpstream_DialFailClosesDownstream(t *testing.T) {
 	}
 }
 
+// TestConnectUpstream_DialTimeout: listen but never Accept so TCP completes
+// (kernel backlog) while the TLS handshake never finishes. Without a deadline
+// this hung forever; with dialTimeout the call must fail promptly and still
+// close downstream.
+func TestConnectUpstream_DialTimeout(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	old := dialTimeout
+	dialTimeout = 200 * time.Millisecond
+	defer func() { dialTimeout = old }()
+
+	client, server := net.Pipe()
+	defer func() { _ = client.Close() }()
+
+	start := time.Now()
+	_, err = connectUpstream(server, ln.Addr().String())
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected timeout error for hung TLS handshake")
+	}
+	// Allow a little early return from scheduling jitter, but it must not be
+	// an instant hard-fail (that would be connection refused, not a hang).
+	if elapsed < dialTimeout/2 {
+		t.Fatalf("returned too fast (not a hang): elapsed=%v timeout=%v err=%v", elapsed, dialTimeout, err)
+	}
+	if elapsed > dialTimeout+2*time.Second {
+		t.Fatalf("took too long: elapsed=%v timeout=%v err=%v", elapsed, dialTimeout, err)
+	}
+	if _, werr := server.Write([]byte("x")); werr == nil {
+		t.Fatal("expected write on closed downstream to fail")
+	}
+}
+
 func TestServeConn_DialFailClosesDownstream(t *testing.T) {
 	client, server := net.Pipe()
 	defer func() { _ = client.Close() }()
