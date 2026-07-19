@@ -1,10 +1,89 @@
 package main
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
 )
+
+// TestAcceptLoop_StopsOnCancel: cancel ctx and close the listener; acceptLoop
+// must return nil promptly so main can exit cleanly under SIGTERM/SIGINT.
+func TestAcceptLoop_StopsOnCancel(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		// Upstream never used: we stop before accepting a client.
+		done <- acceptLoop(ctx, ln, "127.0.0.1:1")
+	}()
+
+	// Let Accept block, then mirror the production shutdown sequence:
+	// cancel first, then close the listener so Accept unblocks.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	_ = ln.Close()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("acceptLoop: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("acceptLoop did not stop after cancel + Close")
+	}
+}
+
+// TestAcceptLoop_AcceptsThenStops: one client is accepted before shutdown.
+func TestAcceptLoop_AcceptsThenStops(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	// Closed port so serveConn's dial fails quickly and closes the client.
+	dead, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("dead listen: %v", err)
+	}
+	remote := dead.Addr().String()
+	_ = dead.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- acceptLoop(ctx, ln, remote)
+	}()
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatalf("dial listener: %v", err)
+	}
+	// serveConn closes the client after dial failure; Read should EOF/err.
+	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 1)
+	_, _ = conn.Read(buf)
+	_ = conn.Close()
+
+	cancel()
+	_ = ln.Close()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("acceptLoop: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("acceptLoop did not stop after cancel + Close")
+	}
+}
 
 func TestConnectUpstream_DialFailClosesDownstream(t *testing.T) {
 	client, server := net.Pipe()
