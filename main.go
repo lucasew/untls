@@ -8,7 +8,10 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -36,9 +39,33 @@ func main() {
 	defer func() { _ = ln.Close() }()
 	log.Printf("info: listening on %s", listenLabel(ln, source))
 
+	// systemd (and interactive Ctrl-C) send SIGTERM/SIGINT. Catch them so we
+	// can close the listener, unblock Accept, and exit 0 instead of being
+	// SIGKILL'd after TimeoutStopSec with Accept still hanging.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		log.Printf("info: shutting down")
+		_ = ln.Close()
+	}()
+
+	if err := acceptLoop(ctx, ln, remote); err != nil {
+		log.Fatalf("accept loop: %s", err)
+	}
+}
+
+// acceptLoop accepts clients until the listener is closed (normally because
+// ctx was cancelled and the shutdown goroutine closed ln). Temporary accept
+// failures are logged and retried while still running.
+func acceptLoop(ctx context.Context, ln net.Listener, remote string) error {
 	for {
 		downstream, err := ln.Accept()
 		if err != nil {
+			// Shutdown path: ctx cancelled then ln closed → Accept errors.
+			if ctx.Err() != nil {
+				return nil
+			}
 			log.Printf("error/accept: %s", err.Error())
 			continue
 		}
