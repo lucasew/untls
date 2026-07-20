@@ -97,7 +97,7 @@ func TestConnectUpstream_DialFailClosesDownstream(t *testing.T) {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 
-	_, err = connectUpstream(server, addr)
+	_, err = connectUpstream(context.Background(), server, addr)
 	if err == nil {
 		t.Fatal("expected dial error for closed upstream port")
 	}
@@ -127,7 +127,7 @@ func TestConnectUpstream_DialTimeout(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	start := time.Now()
-	_, err = connectUpstream(server, ln.Addr().String())
+	_, err = connectUpstream(context.Background(), server, ln.Addr().String())
 	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("expected timeout error for hung TLS handshake")
@@ -139,6 +139,43 @@ func TestConnectUpstream_DialTimeout(t *testing.T) {
 	}
 	if elapsed > dialTimeout+2*time.Second {
 		t.Fatalf("took too long: elapsed=%v timeout=%v err=%v", elapsed, dialTimeout, err)
+	}
+	if _, werr := server.Write([]byte("x")); werr == nil {
+		t.Fatal("expected write on closed downstream to fail")
+	}
+}
+
+// TestConnectUpstream_ParentCancel: a cancelled parent context must abort
+// the dial before dialTimeout (SIGTERM path for in-flight handshakes).
+func TestConnectUpstream_ParentCancel(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	old := dialTimeout
+	dialTimeout = 10 * time.Second
+	defer func() { dialTimeout = old }()
+
+	client, server := net.Pipe()
+	defer func() { _ = client.Close() }()
+
+	parent, cancel := context.WithCancel(context.Background())
+	// Let the dial start against a peer that never completes TLS.
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	start := time.Now()
+	_, err = connectUpstream(parent, server, ln.Addr().String())
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected error after parent cancel")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("parent cancel did not abort promptly: elapsed=%v err=%v", elapsed, err)
+	}
+	if elapsed >= dialTimeout/2 {
+		t.Fatalf("looks like dialTimeout, not parent cancel: elapsed=%v timeout=%v", elapsed, dialTimeout)
 	}
 	if _, werr := server.Write([]byte("x")); werr == nil {
 		t.Fatal("expected write on closed downstream to fail")
@@ -160,7 +197,7 @@ func TestServeConn_DialFailClosesDownstream(t *testing.T) {
 	// close the client side (same ownership rules as connectUpstream).
 	done := make(chan struct{})
 	go func() {
-		serveConn(server, addr)
+		serveConn(context.Background(), server, addr)
 		close(done)
 	}()
 
