@@ -71,8 +71,9 @@ func acceptLoop(ctx context.Context, ln net.Listener, remote string) error {
 		}
 		log.Printf("conn/%s: accepted", downstream.RemoteAddr())
 		// Dial and proxy off the accept loop so a slow or hung upstream
-		// cannot stall Accept for other clients.
-		go serveConn(downstream, remote)
+		// cannot stall Accept for other clients. Pass ctx so SIGTERM
+		// aborts in-flight dials instead of waiting out dialTimeout.
+		go serveConn(ctx, downstream, remote)
 	}
 }
 
@@ -92,10 +93,11 @@ func listenLabel(ln net.Listener, source string) string {
 }
 
 // serveConn dials the upstream TLS endpoint and bridges the client.
-// Safe to call from a goroutine per accepted connection.
-func serveConn(downstream net.Conn, remote string) {
+// Safe to call from a goroutine per accepted connection. parentCtx is
+// typically the process shutdown context so dials abort on SIGTERM.
+func serveConn(parentCtx context.Context, downstream net.Conn, remote string) {
 	addr := downstream.RemoteAddr()
-	upstream, err := connectUpstream(downstream, remote)
+	upstream, err := connectUpstream(parentCtx, downstream, remote)
 	if err != nil {
 		// connectUpstream already closed downstream.
 		log.Printf("conn/%s: %s", addr, err)
@@ -107,14 +109,20 @@ func serveConn(downstream net.Conn, remote string) {
 // dialTimeout bounds the whole upstream TCP+TLS handshake. Without a
 // deadline, a blackholed or stuck peer leaves a goroutine and the client
 // half-open forever (the accept loop is already off the hot path).
-// Overridable in tests.
+// Overridable in tests. Also cancelled early if parentCtx is done
+// (process shutdown).
 var dialTimeout = 10 * time.Second
 
 // connectUpstream dials remote over TLS for a newly accepted client.
-// On dial failure it closes downstream so the accept loop can continue
-// without leaking the client socket or exiting the process.
-func connectUpstream(downstream net.Conn, remote string) (net.Conn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+// parentCtx is combined with dialTimeout so either the wall-clock
+// timeout or process shutdown ends the dial. On dial failure it closes
+// downstream so the accept loop can continue without leaking the client
+// socket or exiting the process.
+func connectUpstream(parentCtx context.Context, downstream net.Conn, remote string) (net.Conn, error) {
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
 	defer cancel()
 
 	upstream, err := (&tls.Dialer{Config: &tls.Config{}}).DialContext(ctx, "tcp", remote)
