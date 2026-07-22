@@ -222,9 +222,16 @@ func TestValidateRemote(t *testing.T) {
 		{name: "host only", addr: "example.com", wantErr: true},
 		{name: "port only", addr: ":443", wantErr: true},
 		{name: "host empty port", addr: "example.com:", wantErr: true},
+		{name: "non-numeric port", addr: "example.com:abc", wantErr: true},
+		{name: "service name port", addr: "example.com:https", wantErr: true},
+		{name: "port zero", addr: "example.com:0", wantErr: true},
+		{name: "port negative", addr: "example.com:-1", wantErr: true},
+		{name: "port too large", addr: "example.com:65536", wantErr: true},
 		{name: "host port", addr: "example.com:443", wantErr: false},
 		{name: "ipv4 port", addr: "127.0.0.1:8443", wantErr: false},
 		{name: "ipv6 port", addr: "[::1]:443", wantErr: false},
+		{name: "port max", addr: "example.com:65535", wantErr: false},
+		{name: "port one", addr: "example.com:1", wantErr: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

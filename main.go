@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -134,6 +135,8 @@ func connectUpstream(parentCtx context.Context, downstream net.Conn, remote stri
 }
 
 // validateRemote checks that -t is a non-empty host:port suitable for tls.Dial.
+// SplitHostPort alone accepts any non-empty port string (e.g. "abc"); require a
+// numeric TCP port in 1–65535 so startup fails before the first Accept.
 func validateRemote(addr string) error {
 	if addr == "" {
 		return fmt.Errorf("missing tcp socket to connect (-t host:port)")
@@ -144,6 +147,10 @@ func validateRemote(addr string) error {
 	}
 	if host == "" || port == "" {
 		return fmt.Errorf("invalid -t address %q: want host:port", addr)
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil || n < 1 || n > 65535 {
+		return fmt.Errorf("invalid -t address %q: port must be 1-65535", addr)
 	}
 	return nil
 }
