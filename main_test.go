@@ -39,6 +39,39 @@ func TestAcceptLoop_StopsOnCancel(t *testing.T) {
 	}
 }
 
+// TestAcceptLoop_PermanentAcceptError: closing the listener without cancelling
+// ctx must return an error promptly. Previously Accept errors were logged and
+// retried forever, which spins the CPU if the socket is closed outside the
+// normal SIGTERM path.
+func TestAcceptLoop_PermanentAcceptError(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	// Intentionally no defer Close: we close below as the failure trigger.
+	// If acceptLoop returns first for some other reason, close to avoid leak.
+	defer func() { _ = ln.Close() }()
+
+	// Never cancel: models a listener closed without the shutdown sequence.
+	ctx := context.Background()
+	done := make(chan error, 1)
+	go func() {
+		done <- acceptLoop(ctx, ln, "127.0.0.1:1")
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	_ = ln.Close()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected permanent Accept error when listener closed without cancel")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("acceptLoop did not return after permanent Accept error (busy-loop?)")
+	}
+}
+
 // TestAcceptLoop_AcceptsThenStops: one client is accepted before shutdown.
 func TestAcceptLoop_AcceptsThenStops(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

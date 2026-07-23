@@ -58,8 +58,10 @@ func main() {
 
 // acceptLoop accepts clients until the listener is closed (normally because
 // ctx was cancelled and the shutdown goroutine closed ln). Temporary accept
-// failures are logged and retried while still running.
+// failures are logged, backed off, and retried (same idea as net/http.Server);
+// permanent Accept errors return so main can exit instead of spinning the CPU.
 func acceptLoop(ctx context.Context, ln net.Listener, remote string) error {
+	var tempDelay time.Duration
 	for {
 		downstream, err := ln.Accept()
 		if err != nil {
@@ -67,9 +69,32 @@ func acceptLoop(ctx context.Context, ln net.Listener, remote string) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			log.Printf("error/accept: %s", err.Error())
-			continue
+			// Temporary: back off and retry (e.g. transient resource pressure).
+			// Permanent (including closed listener without cancel): stop.
+			// net.Error.Temporary is deprecated but is still what net/http uses
+			// for Accept; there is no replacement in the standard library.
+			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+				if tempDelay == 0 {
+					tempDelay = 5 * time.Millisecond
+				} else {
+					tempDelay *= 2
+				}
+				if max := time.Second; tempDelay > max {
+					tempDelay = max
+				}
+				log.Printf("error/accept: %s; retrying in %v", err, tempDelay)
+				timer := time.NewTimer(tempDelay)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return nil
+				case <-timer.C:
+				}
+				continue
+			}
+			return fmt.Errorf("accept: %w", err)
 		}
+		tempDelay = 0
 		log.Printf("conn/%s: accepted", downstream.RemoteAddr())
 		// Dial and proxy off the accept loop so a slow or hung upstream
 		// cannot stall Accept for other clients. Pass ctx so SIGTERM
