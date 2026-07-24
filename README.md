@@ -13,13 +13,16 @@ untls -t <host:port> [-l <port>]
 
 | Flag | Meaning |
 |------|---------|
-| `-t` | **Required.** Upstream address that speaks TLS, as `host:port`. |
-| `-l` | Local plain-TCP listen port. Default: pick a free port. Always binds `127.0.0.1`. |
+| `-t` | **Required.** Upstream address that speaks TLS, as `host:port` (port `1–65535`). |
+| `-l` | Local plain-TCP listen port. Default `0`: kernel picks an ephemeral port. Always binds `127.0.0.1` only. |
 
 Direction of traffic:
 
-1. Local clients connect to `127.0.0.1:< -l >` with **no** TLS.
+1. Local clients connect to `127.0.0.1:<port>` with **no** TLS.
 2. `untls` dials `-t` with TLS and proxies bytes both ways.
+
+On startup the process logs the real listen address (so with `-l 0` you see the
+OS-assigned port, not `0`).
 
 ### Minecraft + Tailscale Funnel example
 
@@ -37,10 +40,22 @@ Then point the Minecraft client at `127.0.0.1:25565`.
 **Common mistake:** swapping the flags. `-l` is only a local port number.
 `-t` is the remote TLS endpoint, not the local game server.
 
+## Runtime behavior
+
+- **Upstream dial:** each accepted client gets its own TLS dial. A slow or hung
+  peer is limited to a **10s** dial timeout; a failed dial closes that client
+  and leaves the accept loop running for others.
+- **Shutdown:** `SIGINT` / `SIGTERM` close the listener, unblock `Accept`, and
+  exit `0` (so systemd `TimeoutStopSec` does not need to `SIGKILL` a stuck
+  accept). In-flight dials are cancelled on the same signal.
+- **TLS trust:** peer certificates use the system CA pool (same as a normal
+  Go `tls.Dial`). Container images need CA certs installed to verify public CAs.
+
 ## Systemd socket activation
 
 If `LISTEN_PID` matches this process, `untls` uses the socket passed on FD 3
-instead of binding `-l` itself.
+instead of binding `-l` itself. Useful when you want socket activation or a
+fixed unit-managed listen address.
 
 ## Build / test
 
