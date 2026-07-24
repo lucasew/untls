@@ -29,6 +29,9 @@ func main() {
 	if err := validateRemote(remote); err != nil {
 		log.Fatal(err)
 	}
+	if err := validateLocalPort(localPort); err != nil {
+		log.Fatal(err)
+	}
 
 	// localPort 0 → bind 127.0.0.1:0 and let the kernel pick a free port.
 	// Avoid GetFreePort()+rebind: that races and can also disagree on address
@@ -176,6 +179,17 @@ func validateRemote(addr string) error {
 	n, err := strconv.Atoi(port)
 	if err != nil || n < 1 || n > 65535 {
 		return fmt.Errorf("invalid -t address %q: port must be 1-65535", addr)
+	}
+	return nil
+}
+
+// validateLocalPort checks that -l is a TCP port the OS can bind.
+// 0 means "let the kernel pick" (ephemeral). Anything outside 0–65535 fails
+// before CreateListener so operators get a clear flag error instead of a
+// late listen failure.
+func validateLocalPort(port int) error {
+	if port < 0 || port > 65535 {
+		return fmt.Errorf("invalid -l port %d: must be 0-65535 (0 = ephemeral)", port)
 	}
 	return nil
 }
