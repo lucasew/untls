@@ -276,6 +276,30 @@ func TestValidateRemote(t *testing.T) {
 	}
 }
 
+func TestValidateLocalPort(t *testing.T) {
+	tests := []struct {
+		name    string
+		port    int
+		wantErr bool
+	}{
+		{name: "ephemeral zero", port: 0, wantErr: false},
+		{name: "min non-zero", port: 1, wantErr: false},
+		{name: "common", port: 25565, wantErr: false},
+		{name: "max", port: 65535, wantErr: false},
+		{name: "negative", port: -1, wantErr: true},
+		{name: "too large", port: 65536, wantErr: true},
+		{name: "way too large", port: 1 << 20, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateLocalPort(tt.port)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateLocalPort(%d) err=%v wantErr=%v", tt.port, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestListenLabel(t *testing.T) {
 	if got := listenLabel(nil, "systemd"); got != "systemd" {
 		t.Fatalf("systemd: got %q", got)
