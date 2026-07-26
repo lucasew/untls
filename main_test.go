@@ -16,7 +16,7 @@ func TestAcceptLoop_StopsOnCancel(t *testing.T) {
 	}
 	defer func() { _ = ln.Close() }()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
 		// Upstream never used: we stop before accepting a client.
@@ -53,7 +53,7 @@ func TestAcceptLoop_PermanentAcceptError(t *testing.T) {
 	defer func() { _ = ln.Close() }()
 
 	// Never cancel: models a listener closed without the shutdown sequence.
-	ctx := context.Background()
+	ctx := t.Context()
 	done := make(chan error, 1)
 	go func() {
 		done <- acceptLoop(ctx, ln, "127.0.0.1:1")
@@ -88,7 +88,7 @@ func TestAcceptLoop_AcceptsThenStops(t *testing.T) {
 	remote := dead.Addr().String()
 	_ = dead.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
@@ -130,7 +130,7 @@ func TestConnectUpstream_DialFailClosesDownstream(t *testing.T) {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 
-	_, err = connectUpstream(context.Background(), server, addr)
+	_, err = connectUpstream(t.Context(), server, addr)
 	if err == nil {
 		t.Fatal("expected dial error for closed upstream port")
 	}
@@ -160,7 +160,7 @@ func TestConnectUpstream_DialTimeout(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	start := time.Now()
-	_, err = connectUpstream(context.Background(), server, ln.Addr().String())
+	_, err = connectUpstream(t.Context(), server, ln.Addr().String())
 	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("expected timeout error for hung TLS handshake")
@@ -194,7 +194,7 @@ func TestConnectUpstream_ParentCancel(t *testing.T) {
 	client, server := net.Pipe()
 	defer func() { _ = client.Close() }()
 
-	parent, cancel := context.WithCancel(context.Background())
+	parent, cancel := context.WithCancel(t.Context())
 	// Let the dial start against a peer that never completes TLS.
 	time.AfterFunc(50*time.Millisecond, cancel)
 
@@ -230,7 +230,7 @@ func TestServeConn_DialFailClosesDownstream(t *testing.T) {
 	// close the client side (same ownership rules as connectUpstream).
 	done := make(chan struct{})
 	go func() {
-		serveConn(context.Background(), server, addr)
+		serveConn(t.Context(), server, addr)
 		close(done)
 	}()
 
