@@ -53,9 +53,48 @@ Then point the Minecraft client at `127.0.0.1:25565`.
 
 ## Systemd socket activation
 
-If `LISTEN_PID` matches this process, `untls` uses the socket passed on FD 3
-instead of binding `-l` itself. Useful when you want socket activation or a
-fixed unit-managed listen address.
+If `LISTEN_PID` matches this process, `untls` uses the socket passed on **FD 3**
+(`SD_LISTEN_FDS_START`) instead of binding `-l` itself. Useful when you want
+socket activation or a unit-managed listen address (and still get clean
+shutdown via `SIGTERM`).
+
+Minimal pair (local plain TCP on `127.0.0.1:25565`, proxy to a TLS upstream):
+
+`untls.socket`:
+
+```ini
+[Unit]
+Description=untls local plain-TCP socket
+
+[Socket]
+ListenStream=127.0.0.1:25565
+Accept=no
+
+[Install]
+WantedBy=sockets.target
+```
+
+`untls.service`:
+
+```ini
+[Unit]
+Description=untls TLS→TCP proxy
+Requires=untls.socket
+After=untls.socket
+
+[Service]
+# -l is ignored under socket activation; -t is still required.
+ExecStart=/usr/local/bin/untls -t your-machine.tailnet.ts.net:443
+# Optional hard stop bound if something hangs outside Accept.
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable with `systemctl enable --now untls.socket` (the `.service` is started
+when the socket gets traffic, or enable the service too if you prefer it always
+up). Confirm the process log line `listening on systemd`.
 
 ## Build / test
 
