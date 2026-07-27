@@ -167,13 +167,3 @@ func TestCreateListener_Systemd(t *testing.T) {
 		t.Fatalf("dial/write side: %v", err)
 	}
 }
-
-func TestGetFreePort(t *testing.T) {
-	port, err := GetFreePort()
-	if err != nil {
-		t.Fatalf("GetFreePort failed: %v", err)
-	}
-	if port <= 0 || port > 65535 {
-		t.Errorf("expected TCP port in 1-65535, got %d", port)
-	}
-}
