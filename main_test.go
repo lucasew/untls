@@ -72,6 +72,125 @@ func TestAcceptLoop_PermanentAcceptError(t *testing.T) {
 	}
 }
 
+// tempNetError implements net.Error with Temporary true so we can exercise the
+// acceptLoop backoff path. Production still keys off Temporary (same as
+// net/http.Server) even though the method is deprecated.
+type tempNetError struct{}
+
+func (tempNetError) Error() string   { return "temporary accept failure" }
+func (tempNetError) Timeout() bool   { return false }
+func (tempNetError) Temporary() bool { return true }
+
+// flakyListener returns Temporary Accept errors remainTemp times, then
+// delegates to the embedded Listener.
+type flakyListener struct {
+	net.Listener
+	remainTemp int
+	tempHits   *int
+}
+
+func (f *flakyListener) Accept() (net.Conn, error) {
+	if f.remainTemp > 0 {
+		f.remainTemp--
+		if f.tempHits != nil {
+			*f.tempHits++
+		}
+		return nil, tempNetError{}
+	}
+	return f.Listener.Accept()
+}
+
+// TestAcceptLoop_RetriesTemporaryAccept: transient Accept failures must back
+// off and retry, not tear down the process. After the flaky errors clear, a
+// real client is accepted (dial fails upstream so serveConn exits quickly).
+func TestAcceptLoop_RetriesTemporaryAccept(t *testing.T) {
+	real, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = real.Close() }()
+
+	hits := 0
+	ln := &flakyListener{Listener: real, remainTemp: 3, tempHits: &hits}
+
+	// Closed port so serveConn's dial fails quickly after Accept succeeds.
+	dead, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("dead listen: %v", err)
+	}
+	remote := dead.Addr().String()
+	_ = dead.Close()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- acceptLoop(ctx, ln, remote)
+	}()
+
+	// Backoff is 5ms + 10ms + 20ms for three temporary failures; wait past that
+	// so Accept is blocked on the real listener before we dial.
+	time.Sleep(100 * time.Millisecond)
+
+	conn, err := net.Dial("tcp", real.Addr().String())
+	if err != nil {
+		t.Fatalf("dial listener: %v", err)
+	}
+	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 1)
+	_, _ = conn.Read(buf)
+	_ = conn.Close()
+
+	if hits != 3 {
+		t.Fatalf("temporary Accept count = %d, want 3", hits)
+	}
+
+	cancel()
+	_ = real.Close()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("acceptLoop: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("acceptLoop did not stop after cancel + Close")
+	}
+}
+
+// TestAcceptLoop_CancelDuringTempBackoff: SIGTERM during the temporary-error
+// sleep must unblock promptly (timer select on ctx), not wait out the delay
+// ladder up to 1s.
+func TestAcceptLoop_CancelDuringTempBackoff(t *testing.T) {
+	real, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = real.Close() }()
+
+	// Endless temporary Accept so the loop stays in the retry/backoff path.
+	ln := &flakyListener{Listener: real, remainTemp: 1 << 20}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		done <- acceptLoop(ctx, ln, "127.0.0.1:1")
+	}()
+
+	// Let at least one temporary failure and its timer arm, then cancel.
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("acceptLoop: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("acceptLoop did not stop during temporary Accept backoff after cancel")
+	}
+}
+
 // TestAcceptLoop_AcceptsThenStops: one client is accepted before shutdown.
 func TestAcceptLoop_AcceptsThenStops(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
