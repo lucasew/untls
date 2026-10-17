@@ -74,9 +74,9 @@ func acceptLoop(ctx context.Context, ln net.Listener, remote string) error {
 			}
 			// Temporary: back off and retry (e.g. transient resource pressure).
 			// Permanent (including closed listener without cancel): stop.
-			// net.Error.Temporary is deprecated but is still what net/http uses
-			// for Accept; there is no replacement in the standard library.
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+			// net.Error.Temporary is deprecated, and it is still what net/http
+			// uses for Accept. There is no replacement in the standard library.
+			if ne, ok := err.(net.Error); ok && ne.Temporary() { //nolint:staticcheck // SA1019: same Accept backoff as net/http.Server
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
 				} else {
