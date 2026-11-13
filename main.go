@@ -143,14 +143,12 @@ func serveConn(parentCtx context.Context, downstream net.Conn, remote string) {
 var dialTimeout = 10 * time.Second
 
 // connectUpstream dials remote over TLS for a newly accepted client.
-// parentCtx is combined with dialTimeout so either the wall-clock
-// timeout or process shutdown ends the dial. On dial failure it closes
-// downstream so the accept loop can continue without leaking the client
-// socket or exiting the process.
+// parentCtx must be non-nil (process shutdown context from main); it is
+// combined with dialTimeout so either the wall-clock timeout or process
+// shutdown ends the dial. On dial failure it closes downstream so the
+// accept loop can continue without leaking the client socket or exiting
+// the process.
 func connectUpstream(parentCtx context.Context, downstream net.Conn, remote string) (net.Conn, error) {
-	if parentCtx == nil {
-		parentCtx = context.Background()
-	}
 	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
 	defer cancel()
 
