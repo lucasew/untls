@@ -1,34 +1,58 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-if [ $# == 1 ]; then
-	VERSION="$1"; shift
-else
-	echo ./make_release versao_nova >&2
+if [ $# -ne 1 ]; then
+	echo "usage: ./make_release <patch|minor|major|x.y.z>" >&2
 	exit 1
 fi
 
-CURRENT_VERSION=($(cat version.txt | sed 's;\.; ;g'))
+VERSION="$1"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+
+if [[ ! -f version.txt ]]; then
+	echo "version.txt missing" >&2
+	exit 1
+fi
+
+CURRENT="$(tr -d '[:space:]' < version.txt)"
+IFS=. read -r MAJOR MINOR PATCH _ <<<"$CURRENT" || true
+if [[ -z "${MAJOR:-}" || -z "${MINOR:-}" || -z "${PATCH:-}" ]]; then
+	echo "version.txt must be major.minor.patch, got: ${CURRENT:-<empty>}" >&2
+	exit 1
+fi
+if [[ ! "$MAJOR" =~ ^[0-9]+$ || ! "$MINOR" =~ ^[0-9]+$ || ! "$PATCH" =~ ^[0-9]+$ ]]; then
+	echo "version.txt components must be integers, got: $CURRENT" >&2
+	exit 1
+fi
 
 case "$VERSION" in
 	patch)
-		VERSION="${CURRENT_VERSION[0]}.${CURRENT_VERSION[1]}.$((${CURRENT_VERSION[2]}+1))"
-	;;
+		VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+		;;
 	minor)
-		VERSION="${CURRENT_VERSION[0]}.$((${CURRENT_VERSION[1]}+1)).0"
-	;;
+		VERSION="${MAJOR}.$((MINOR + 1)).0"
+		;;
 	major)
-		VERSION="$((${CURRENT_VERSION[0]}+1)).0.0"
-	;;
+		VERSION="$((MAJOR + 1)).0.0"
+		;;
+	*)
+		if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+			echo "invalid version: $VERSION (want patch|minor|major|x.y.z)" >&2
+			exit 1
+		fi
+		;;
 esac
 
-# echo new version: $VERSION
-# exit 0
-printf "%s" "$VERSION" > version.txt
+printf '%s' "$VERSION" > version.txt
 
-git add -A
+# Only stage the version file — never git add -A (would pick up build artifacts,
+# local secrets, and other untracked noise into the release commit).
+git add version.txt
 git commit -sm "bump to $VERSION"
 if [[ ! -v NO_TAG ]]; then
 	git tag "$VERSION"
-	git push --tag
+	# Push only this tag, not every local tag.
+	git push origin "refs/tags/${VERSION}"
 fi
 git push
